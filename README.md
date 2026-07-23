@@ -30,6 +30,21 @@ uvicorn main:app --reload --port 8010
 
 Open http://localhost:8010
 
+## Demo
+
+![Resume Screener UI](screenshot.png)
+
+### Sample Output
+
+```json
+{
+  "match_percentage": 85,
+  "matched_skills": ["Python", "FastAPI", "PostgreSQL", "Docker", "REST API", "Machine Learning", "Redis"],
+  "missing_skills": ["Kubernetes"],
+  "explanation": "Strong candidate — matches 7 of 8 required skills..."
+}
+```
+
 ## API Endpoints
 
 - `POST /screen` — upload PDF resume + job description
