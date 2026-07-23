@@ -1,0 +1,4 @@
+We are looking for a Python Backend Developer.
+Required skills: Python, FastAPI, PostgreSQL, Docker, REST API, Git.
+Nice to have: Machine Learning, Redis, Kubernetes, AWS.
+Experience: 2+ years backend development.

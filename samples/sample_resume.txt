@@ -1,0 +1,4 @@
+Software Engineer with 3 years experience.
+Skills: Python, FastAPI, PostgreSQL, Docker, Redis, Git, REST API.
+Machine Learning experience with scikit-learn and pandas.
+Built and deployed 5 production REST APIs.

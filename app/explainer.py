@@ -1,19 +1,35 @@
 """Generate natural-language match explanations via Ollama."""
 
 import json
+import os
+import urllib.error
 import urllib.request
 
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "qwen2.5:3b"
+def _ollama_endpoint():
+    base = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+    if base.endswith("/api/generate"):
+        return base
+    return f"{base}/api/generate"
+
+
+def _ollama_model():
+    return os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+
+
+class OllamaUnavailableError(RuntimeError):
+    """Raised when Ollama cannot be reached or returns an error."""
 
 
 def explain_match(match_result, job_title):
     """
-    Call Ollama (qwen2.5:3b) to explain fit in 3 sentences.
+    Call Ollama to explain fit in 3 sentences.
 
-    Returns explanation string.
+    Raises OllamaUnavailableError if the server/model is unavailable.
     """
+    model = _ollama_model()
+    url = _ollama_endpoint()
+
     prompt = f"""You are a recruiting assistant.
 Job title: {job_title}
 
@@ -29,19 +45,29 @@ In exactly 3 sentences, explain why this candidate is or is not a good fit for t
 """
 
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": model,
         "prompt": prompt,
         "stream": False,
     }
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
-        OLLAMA_URL,
+        url,
         data=data,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
 
-    with urllib.request.urlopen(request, timeout=120) as response:
-        body = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise OllamaUnavailableError(
+            f"Ollama is not reachable at {url}: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise OllamaUnavailableError(f"Ollama request failed: {exc}") from exc
 
-    return (body.get("response") or "").strip()
+    text = (body.get("response") or "").strip()
+    if not text:
+        raise OllamaUnavailableError("Ollama returned an empty explanation")
+    return text
