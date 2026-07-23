@@ -468,12 +468,28 @@
   </div>
 
   <script>
-    // Prefer same-origin (works when UI is served by FastAPI).
-    // Fall back to 8010 if the page is opened as a local file.
-    const API_BASE =
-      window.location.protocol === "http:" || window.location.protocol === "https:"
-        ? ""
-        : "http://127.0.0.1:8010";
+    // Prefer same-origin when UI is served by FastAPI; always fall back to 8010.
+    const API_CANDIDATES = (() => {
+      const list = [];
+      if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+        list.push(""); // same origin
+      }
+      list.push("http://127.0.0.1:8010");
+      list.push("http://localhost:8010");
+      return list;
+    })();
+
+    async function resolveApiBase() {
+      for (const base of API_CANDIDATES) {
+        try {
+          const res = await fetch(base + "/health", { method: "GET", cache: "no-store" });
+          if (res.ok) return base;
+        } catch (_) {
+          /* try next */
+        }
+      }
+      return null;
+    }
 
     const dropzone = document.getElementById("dropzone");
     const resumeInput = document.getElementById("resumeInput");
@@ -485,6 +501,19 @@
     const results = document.getElementById("results");
 
     let selectedFile = null;
+    let apiBase = "";
+
+    // Warn early if API is unreachable
+    (async () => {
+      apiBase = await resolveApiBase();
+      if (apiBase === null) {
+        showError(
+          "Server not reachable on port 8010. In a terminal run: ./start.sh"
+        );
+      } else {
+        console.log("API ready at", apiBase || window.location.origin);
+      }
+    })();
 
     function setFile(file) {
       if (!file) return;
@@ -620,7 +649,18 @@
       formData.append("resume", resumeFile);
       formData.append("job_description", jd.trim());
 
-      const url = API_BASE + "/screen";
+      if (apiBase === null || apiBase === undefined) {
+        apiBase = await resolveApiBase();
+      }
+      if (apiBase === null) {
+        showError(
+          "Connection failed: Load failed — Make sure the server is running: ./start.sh  (or: uvicorn main:app --port 8010)"
+        );
+        hideLoading();
+        return;
+      }
+
+      const url = apiBase + "/screen";
 
       try {
         console.log("Sending request to", url);
@@ -647,10 +687,11 @@
         showResults(data);
       } catch (err) {
         console.error("Fetch error:", err);
+        apiBase = null;
         showError(
           "Connection failed: " +
             err.message +
-            " — Make sure the server is running: uvicorn main:app --port 8010"
+            " — Make sure the server is running: ./start.sh"
         );
       } finally {
         hideLoading();
