@@ -7,6 +7,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -16,7 +17,7 @@ from app.matcher import match_resume_to_jd
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -26,6 +27,14 @@ app = FastAPI(
     title="Resume Screener",
     description="AI-powered resume screening using MiniLM + spaCy + Ollama",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -128,22 +137,29 @@ def screen_text(payload: ScreenTextRequest):
 @app.post("/screen")
 async def screen(
     resume: UploadFile = File(...),
-    jd_text: Optional[str] = Form(default=None),
     job_description: Optional[str] = Form(default=None),
+    jd_text: Optional[str] = Form(default=None),
     job_title: str = Form(default="Open Position"),
 ):
     """
     Screen a resume PDF against a job description.
 
-    Accepts either form field: jd_text or job_description.
+    Accepts form fields: resume (PDF) + job_description (or jd_text).
     Pipeline: extractor → embedder → matcher → explainer
     """
     tmp_path = None
     try:
+        logger.info("Received file: %s", resume.filename)
+        logger.info("Content-Type: %s", resume.content_type)
+        logger.info(
+            "JD length: %s",
+            len((job_description or jd_text or "")),
+        )
+
         if not resume.filename or not resume.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Only PDF resumes are supported")
 
-        jd = (jd_text or job_description or "").strip()
+        jd = (job_description or jd_text or "").strip()
         if not jd:
             raise HTTPException(
                 status_code=400,
@@ -154,6 +170,7 @@ async def screen(
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 content = await resume.read()
+                logger.info("File size: %s bytes", len(content))
                 if not content:
                     raise HTTPException(status_code=400, detail="Uploaded PDF file is empty")
                 tmp.write(content)
@@ -168,6 +185,7 @@ async def screen(
 
         try:
             resume_text = extract_text_from_pdf(tmp_path)
+            logger.info("Extracted resume text length: %s", len(resume_text))
         except FileNotFoundError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as exc:

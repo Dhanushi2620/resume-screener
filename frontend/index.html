@@ -468,7 +468,12 @@
   </div>
 
   <script>
-    const API_BASE = "http://localhost:8010";
+    // Prefer same-origin (works when UI is served by FastAPI).
+    // Fall back to 8010 if the page is opened as a local file.
+    const API_BASE =
+      window.location.protocol === "http:" || window.location.protocol === "https:"
+        ? ""
+        : "http://127.0.0.1:8010";
 
     const dropzone = document.getElementById("dropzone");
     const resumeInput = document.getElementById("resumeInput");
@@ -534,6 +539,16 @@
       errorEl.textContent = "";
     }
 
+    function showLoading() {
+      screenBtn.disabled = true;
+      loading.classList.add("visible");
+    }
+
+    function hideLoading() {
+      loading.classList.remove("visible");
+      screenBtn.disabled = false;
+    }
+
     function renderBadges(container, items, tone) {
       container.innerHTML = "";
       if (!items || !items.length) {
@@ -557,7 +572,7 @@
       return "#c0392b";
     }
 
-    function populateResults(data) {
+    function showResults(data) {
       const match = data.match || {};
       const pct = Number(match.match_percentage ?? 0);
 
@@ -571,58 +586,78 @@
       renderBadges(document.getElementById("resumeSkills"), match.resume_skills, "navy");
       renderBadges(document.getElementById("jdSkills"), match.jd_skills, "teal");
 
+      let explanation = data.explanation || "";
+      if (!explanation && data.explanation_skipped) {
+        explanation =
+          "AI explanation unavailable (is Ollama running?). Match scores are still shown above. " +
+          (data.explanation_error || "");
+      }
       document.getElementById("explanation").textContent =
-        data.explanation || "No explanation available.";
+        explanation || "No explanation available.";
 
       results.classList.add("visible");
     }
 
-    screenBtn.addEventListener("click", async () => {
+    async function screenResume() {
       hideError();
       results.classList.remove("visible");
 
-      if (!selectedFile) {
-        showError("Please upload a resume PDF.");
+      const resumeFile = selectedFile || (resumeInput.files && resumeInput.files[0]);
+      const jd = jdText.value;
+
+      if (!resumeFile) {
+        showError("Please upload a resume PDF");
         return;
       }
-      if (!jdText.value.trim()) {
-        showError("Please paste a job description.");
+      if (!jd.trim()) {
+        showError("Please enter a job description");
         return;
       }
+
+      showLoading();
 
       const formData = new FormData();
-      formData.append("resume", selectedFile);
-      formData.append("jd_text", jdText.value.trim());
+      formData.append("resume", resumeFile);
+      formData.append("job_description", jd.trim());
 
-      screenBtn.disabled = true;
-      loading.classList.add("visible");
+      const url = API_BASE + "/screen";
 
       try {
-        const res = await fetch(API_BASE + "/screen", {
+        console.log("Sending request to", url);
+        console.log("File:", resumeFile.name, resumeFile.size, "bytes");
+        console.log("JD length:", jd.trim().length);
+
+        const response = await fetch(url, {
           method: "POST",
           body: formData,
         });
 
-        let payload = null;
-        try {
-          payload = await res.json();
-        } catch (_) {
-          payload = null;
+        console.log("Response status:", response.status);
+        console.log("Response ok:", response.ok);
+
+        const text = await response.text();
+        console.log("Raw response:", text);
+
+        if (!response.ok) {
+          showError("Server error: " + response.status + " — " + text);
+          return;
         }
 
-        if (!res.ok) {
-          const detail = payload && (payload.detail || payload.message);
-          throw new Error(detail || ("Request failed (" + res.status + ")"));
-        }
-
-        populateResults(payload);
+        const data = JSON.parse(text);
+        showResults(data);
       } catch (err) {
-        showError(err.message || "Something went wrong while screening.");
+        console.error("Fetch error:", err);
+        showError(
+          "Connection failed: " +
+            err.message +
+            " — Make sure the server is running: uvicorn main:app --port 8010"
+        );
       } finally {
-        loading.classList.remove("visible");
-        screenBtn.disabled = false;
+        hideLoading();
       }
-    });
+    }
+
+    screenBtn.addEventListener("click", screenResume);
   </script>
 </body>
 </html>
