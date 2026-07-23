@@ -1,54 +1,47 @@
 """Generate natural-language match explanations via Ollama."""
 
-from __future__ import annotations
-
-from typing import Any, Dict
-
-import ollama
+import json
+import urllib.request
 
 
-DEFAULT_MODEL = "llama3.2"
+OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODEL = "qwen2.5:3b"
 
 
-def build_prompt(match_result: Dict[str, Any], jd_excerpt: str = "", resume_excerpt: str = "") -> str:
-    """Build an explanation prompt from matcher output."""
-    return f"""You are a recruiting assistant. Explain how well this resume matches the job description.
+def explain_match(match_result, job_title):
+    """
+    Call Ollama (qwen2.5:3b) to explain fit in 3 sentences.
 
-Overall score: {match_result.get('overall_score', 'N/A')}%
-Embedding similarity: {match_result.get('embedding_similarity', 'N/A')}%
-Skill score: {match_result.get('skill_score', 'N/A')}%
-Matched skills: {', '.join(match_result.get('matched_skills') or []) or 'none'}
-Missing skills: {', '.join(match_result.get('missing_skills') or []) or 'none'}
+    Returns explanation string.
+    """
+    prompt = f"""You are a recruiting assistant.
+Job title: {job_title}
 
-Job description excerpt:
-{jd_excerpt[:1500] or '(not provided)'}
+Match result:
+- Similarity score: {match_result.get('similarity_score')}
+- Match percentage: {match_result.get('match_percentage')}%
+- Matched skills: {', '.join(match_result.get('matched_skills') or []) or 'none'}
+- Missing skills: {', '.join(match_result.get('missing_skills') or []) or 'none'}
+- Resume skills: {', '.join(match_result.get('resume_skills') or []) or 'none'}
+- JD skills: {', '.join(match_result.get('jd_skills') or []) or 'none'}
 
-Resume excerpt:
-{resume_excerpt[:1500] or '(not provided)'}
-
-Write 2–4 concise paragraphs covering:
-1. Overall fit
-2. Strengths (matched skills / experience signals)
-3. Gaps (missing skills)
-4. A short recommendation (strong / moderate / weak fit)
+In exactly 3 sentences, explain why this candidate is or is not a good fit for the role.
 """
 
-
-def explain_match(
-    match_result: Dict[str, Any],
-    jd_text: str = "",
-    resume_text: str = "",
-    model: str = DEFAULT_MODEL,
-) -> str:
-    """
-    Ask Ollama to explain a resume–JD match result.
-
-    Requires a running Ollama server with the chosen model pulled.
-    """
-    prompt = build_prompt(match_result, jd_excerpt=jd_text, resume_excerpt=resume_text)
-    response = ollama.chat(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
+    payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        OLLAMA_URL,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
-    message = response.get("message") or {}
-    return (message.get("content") or "").strip()
+
+    with urllib.request.urlopen(request, timeout=120) as response:
+        body = json.loads(response.read().decode("utf-8"))
+
+    return (body.get("response") or "").strip()

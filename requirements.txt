@@ -2,9 +2,10 @@ fastapi
 uvicorn
 python-multipart
 pdfminer.six
-spacy
+spacy==3.7.5
 sentence-transformers
 chromadb
 ollama
 python-dotenv
 numpy
+cryptography==42.0.8
