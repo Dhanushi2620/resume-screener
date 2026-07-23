@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+pdfminer.six
+spacy
+sentence-transformers
+chromadb
+ollama
+python-dotenv
+numpy

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+data/resumes/
+data/jd/
+venv/
+.venv/
+*.pdf
