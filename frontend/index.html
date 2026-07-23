@@ -468,6 +468,8 @@
   </div>
 
   <script>
+    const API_BASE = "http://localhost:8010";
+
     const dropzone = document.getElementById("dropzone");
     const resumeInput = document.getElementById("resumeInput");
     const fileName = document.getElementById("fileName");
@@ -596,7 +598,7 @@
       loading.classList.add("visible");
 
       try {
-        const res = await fetch("/screen", {
+        const res = await fetch(API_BASE + "/screen", {
           method: "POST",
           body: formData,
         });
